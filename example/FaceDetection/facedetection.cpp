@@ -1,4 +1,3 @@
-//#include <opencv2\opencv.hpp>
 #include <opencv2/objdetect/objdetect.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -8,7 +7,7 @@
 using namespace std;
 using namespace cv;
 
-string path="F:/SourceCode/GitWorking/Face/data";
+string path="F:/SourceCode/GitWorking/Face/Face/data";
 const double DESIRED_LEFT_EYE_X = 0.16;     // 控制处理后人脸的多少部分是可见的
 const double DESIRED_LEFT_EYE_Y = 0.14;
 const double FACE_ELLIPSE_CY = 0.40;
@@ -22,8 +21,8 @@ CascadeClassifier  eyeDetector2;
 CascadeClassifier  eyeDetector3;
 /*--------------------------------------目标检测-------------------------------------*/
 void detectObjectsCustom(const Mat &img, CascadeClassifier &cascade, vector<Rect> &objects, int scaledWidth, int flags, Size minFeatureSize, float searchScaleFactor, int minNeighbors);
-void detectLargestObject(const Mat &img, CascadeClassifier &cascade, Rect &largestObject, int scaledWidth);
-void detectManyObjects(const Mat &img, CascadeClassifier &cascade, vector<Rect> &objects, int scaledWidth);
+void detectLargestObject(const Mat &img, CascadeClassifier &cascade, Rect &largestObject, int scaledWidth,bool &hasFace);
+void detectManyObjects(const Mat &img, CascadeClassifier &cascade, vector<Rect> &objects, int scaledWidth,bool &hasFace);
 /*------------------------------------- end------------------------------------------*/
 
 void detectBothEyes(const Mat &face, CascadeClassifier &eyeCascade1, CascadeClassifier &eyeCascade2,CascadeClassifier &eyeCascade3, Point &leftEye, Point &rightEye, Rect *searchedLeftEye, Rect *searchedRightEye);
@@ -32,10 +31,11 @@ Mat getPreprocessedFace(Mat &srcImg, int desiredFaceWidth, CascadeClassifier &fa
 void initDetector()
 {
 	try{  
-		//faceDetector.load("/haarcascade_frontalface_alt.xml");  
-		faceDetector.load(path+"/lbpcascade_frontalface.xml");  
-		//eyeDetector1.load("/haarcascade_eye.xml");
-		//eyeDetector2.load("/haarcascade_eye_tree_eyeglasses.xml");
+		//faceDetector.load(path+"/haarcascade_frontalface_alt.xml");
+		faceDetector.load(path+"/haarcascade_frontalface_alt_tree.xml");
+		//faceDetector.load(path+"/lbpcascade_frontalface.xml");  
+		//eyeDetector1.load(path+"/haarcascade_eye.xml");
+		//eyeDetector2.load(path+"/haarcascade_eye_tree_eyeglasses.xml");
 		eyeDetector1.load(path+"/haarcascade_mcs_lefteye.xml");
 		eyeDetector2.load(path+"/haarcascade_mcs_righteye.xml");
 
@@ -49,129 +49,161 @@ void initDetector()
 	}  
 }
 
-void process(string path)
+void process(Mat image)
 {
-
-	Mat img=imread(path.c_str(),1);
 	Rect largestObject;
 	const int scaledWidth=320;
-	detectLargestObject(img,faceDetector,largestObject,scaledWidth);
-	Mat img_rect(img,largestObject);
-	Point leftEye,rightEye;
-	Rect searchedLeftEye,searchedRightEye;
-	detectBothEyes(img_rect,eyeDetector1,eyeDetector2,eyeDetector3,leftEye,rightEye,&searchedLeftEye,&searchedRightEye);
-	//仿射变换
-	Point2f eyesCenter;
-	eyesCenter.x=(leftEye.x+rightEye.x)*0.5f;
-	eyesCenter.y=(leftEye.y+rightEye.y)*0.5f;
-	cout<<"左眼中心坐标 "<<leftEye.x<<" and "<<leftEye.y<<endl;
-	cout<<"右眼中心坐标 "<<rightEye.x<<" and "<<rightEye.y<<endl;
-	//获取两个人眼的角度
-	double dy=(rightEye.y-leftEye.y);
-	double dx=(rightEye.x-leftEye.x);
-	double len=sqrt(dx*dx+dy*dy);
-	cout<<"dx is "<<dx<<endl;
-	cout<<"dy is "<<dy<<endl;
-	cout<<"len is "<<len<<endl;
-	double angle=atan2(dy,dx)*180.0/CV_PI;
-	const double DESIRED_RIGHT_EYE_X=1.0f-0.16;
-	//得到我们想要的尺度化大小
-	const int DESIRED_FACE_WIDTH=100;
-	const int DESIRED_FACE_HEIGHT=100;
-	double desiredLen=(DESIRED_RIGHT_EYE_X-0.16);
-	cout<<"desiredlen is "<<desiredLen<<endl;
-	double scale=desiredLen*DESIRED_FACE_WIDTH/len;
-	cout<<"the scale is "<<scale<<endl;
-	Mat rot_mat = getRotationMatrix2D(eyesCenter, angle, scale);
-	double ex=DESIRED_FACE_WIDTH * 0.5f - eyesCenter.x;
-	double ey = DESIRED_FACE_HEIGHT * DESIRED_LEFT_EYE_Y-eyesCenter.y;
-	rot_mat.at<double>(0, 2) += ex;
-	rot_mat.at<double>(1, 2) += ey;
-	Mat warped = Mat(DESIRED_FACE_HEIGHT, DESIRED_FACE_WIDTH,CV_8U, Scalar(128));
-	warpAffine(img_rect, warped, rot_mat, warped.size());
-
-	//直方图均衡化,左均衡右均衡,全均衡
-
-	Mat faceImg_temp,faceImg(warped.rows,warped.cols,warped.type());
-	warped.copyTo(faceImg_temp);
-	cvtColor(faceImg_temp,faceImg,CV_BGR2GRAY);
-	imshow("faceImg",faceImg);
-	int w=faceImg.cols;
-	int h=faceImg.rows;
-	Mat wholeFace;
-	equalizeHist(faceImg,wholeFace);
-	int midX=w/2;
-	Mat leftSide=faceImg(Rect(0,0,midX,h));
-	Mat rightSide=faceImg(Rect(midX,0,w-midX,h));
-	equalizeHist(leftSide,leftSide);
-	equalizeHist(rightSide,rightSide);
-
-
-	for(int y=0;y<h;y++)
+	bool hasFace=false;
+	detectLargestObject(image,faceDetector,largestObject,scaledWidth,hasFace);
+	if (hasFace)
 	{
-		for(int x=0;x<w;x++)
+		Mat img_rect(image,largestObject);
+		Point leftEye,rightEye;
+		Rect searchedLeftEye,searchedRightEye;
+		detectBothEyes(img_rect,eyeDetector1,eyeDetector2,eyeDetector3,leftEye,rightEye,&searchedLeftEye,&searchedRightEye);
+		//仿射变换
+		Point2f eyesCenter;
+		eyesCenter.x=(leftEye.x+rightEye.x)*0.5f;
+		eyesCenter.y=(leftEye.y+rightEye.y)*0.5f;
+		cout<<"左眼中心坐标 "<<leftEye.x<<" and "<<leftEye.y<<endl;
+		cout<<"右眼中心坐标 "<<rightEye.x<<" and "<<rightEye.y<<endl;
+		//获取两个人眼的角度
+		double dy=(rightEye.y-leftEye.y);
+		double dx=(rightEye.x-leftEye.x);
+		double len=sqrt(dx*dx+dy*dy);
+		cout<<"dx is "<<dx<<endl;
+		cout<<"dy is "<<dy<<endl;
+		cout<<"len is "<<len<<endl;
+		double angle=atan2(dy,dx)*180.0/CV_PI;
+		const double DESIRED_RIGHT_EYE_X=1.0f-0.16;
+		//得到我们想要的尺度化大小
+		const int DESIRED_FACE_WIDTH=100;
+		const int DESIRED_FACE_HEIGHT=100;
+		double desiredLen=(DESIRED_RIGHT_EYE_X-0.16);
+		cout<<"desiredlen is "<<desiredLen<<endl;
+		double scale=desiredLen*DESIRED_FACE_WIDTH/len;
+		cout<<"the scale is "<<scale<<endl;
+		Mat rot_mat = getRotationMatrix2D(eyesCenter, angle, scale);
+		double ex=DESIRED_FACE_WIDTH * 0.5f - eyesCenter.x;
+		double ey = DESIRED_FACE_HEIGHT * DESIRED_LEFT_EYE_Y-eyesCenter.y;
+		rot_mat.at<double>(0, 2) += ex;
+		rot_mat.at<double>(1, 2) += ey;
+		Mat warped = Mat(DESIRED_FACE_HEIGHT, DESIRED_FACE_WIDTH,CV_8U, Scalar(128));
+		warpAffine(img_rect, warped, rot_mat, warped.size());
+
+		//直方图均衡化,左均衡右均衡,全均衡
+
+		Mat faceImg_temp,faceImg(warped.rows,warped.cols,warped.type());
+		warped.copyTo(faceImg_temp);
+		cvtColor(faceImg_temp,faceImg,CV_BGR2GRAY);
+		imshow("faceImg",faceImg);
+		int w=faceImg.cols;
+		int h=faceImg.rows;
+		Mat wholeFace;
+		equalizeHist(faceImg,wholeFace);
+		int midX=w/2;
+		Mat leftSide=faceImg(Rect(0,0,midX,h));
+		Mat rightSide=faceImg(Rect(midX,0,w-midX,h));
+		equalizeHist(leftSide,leftSide);
+		equalizeHist(rightSide,rightSide);
+
+
+		for(int y=0;y<h;y++)
 		{
-			int v;
-			if(x<w/4)
+			for(int x=0;x<w;x++)
 			{
-				v=leftSide.at<uchar>(y,x);
-			}else if(x<w*2/4)
-			{
-				int lv=leftSide.at<uchar>(y,x);
-				int wv=wholeFace.at<uchar>(y,x);
-				float f=(x-w*1/4)/(float)(w/4);
-				v=cvRound((1.0f-f)*lv+(f)*wv);
-			}else if(x<w*3/4)
-			{
-				int rv=rightSide.at<uchar>(y,x-midX);
-				int wv=wholeFace.at<uchar>(y,x);
-				float f=(x-w*2/4)/(float)(w/4);
-				v=cvRound((1.0f-f)*wv+(f)*rv);
+				int v;
+				if(x<w/4)
+				{
+					v=leftSide.at<uchar>(y,x);
+				}else if(x<w*2/4)
+				{
+					int lv=leftSide.at<uchar>(y,x);
+					int wv=wholeFace.at<uchar>(y,x);
+					float f=(x-w*1/4)/(float)(w/4);
+					v=cvRound((1.0f-f)*lv+(f)*wv);
+				}else if(x<w*3/4)
+				{
+					int rv=rightSide.at<uchar>(y,x-midX);
+					int wv=wholeFace.at<uchar>(y,x);
+					float f=(x-w*2/4)/(float)(w/4);
+					v=cvRound((1.0f-f)*wv+(f)*rv);
 
-			}else 
-			{
-				v=rightSide.at<uchar>(y,x-midX);
+				}else 
+				{
+					v=rightSide.at<uchar>(y,x-midX);
+				}
+				faceImg.at<uchar>(y,x)=v;
 			}
-			faceImg.at<uchar>(y,x)=v;
 		}
+		//平滑图像
+
+		imshow("混合后 ",faceImg);
+		Mat filtered=Mat(warped.size(),CV_8U);
+		bilateralFilter(faceImg,filtered,0,20.0,2.0);
+		imshow("双边滤波后",filtered);
+		//椭圆形掩码
+		Mat mask=Mat(warped.size(),CV_8UC1,Scalar(255));
+		double dw=DESIRED_FACE_WIDTH;
+		double dh=DESIRED_FACE_HEIGHT;
+		Point faceCenter=Point(cvRound(dw*0.5),cvRound(dh*0.4));
+		Size size=Size(cvRound(dw*0.5),cvRound(dh*0.8));
+		ellipse(mask,faceCenter,size,0,0,360,Scalar(0),CV_FILLED);
+		filtered.setTo(Scalar(128),mask);
+
+		imshow("filtered",filtered);
+
+
+		imshow("warped",warped);
+
+		rectangle(image,Point(largestObject.x,largestObject.y),Point(largestObject.x+largestObject.width,largestObject.y+largestObject.height),Scalar(0,0,255),2,8);
+		rectangle(img_rect,Point(searchedLeftEye.x,searchedLeftEye.y),Point(searchedLeftEye.x+searchedLeftEye.width,searchedLeftEye.y+searchedLeftEye.height),Scalar(0,255,0),2,8);
+		rectangle(img_rect,Point(searchedRightEye.x,searchedRightEye.y),Point(searchedRightEye.x+searchedRightEye.width,searchedRightEye.y+searchedRightEye.height),Scalar(0,255,0),2,8);
+
+
+		//getPreprocessedFace
+		imshow("img_rect",img_rect);
+		imwrite("img_rect.jpg",img_rect);
+		imshow("img",image);
 	}
-	//平滑图像
-
-	imshow("混合后 ",faceImg);
-	Mat filtered=Mat(warped.size(),CV_8U);
-	bilateralFilter(faceImg,filtered,0,20.0,2.0);
-	imshow("双边滤波后",filtered);
-	//椭圆形掩码
-	Mat mask=Mat(warped.size(),CV_8UC1,Scalar(255));
-	double dw=DESIRED_FACE_WIDTH;
-	double dh=DESIRED_FACE_HEIGHT;
-	Point faceCenter=Point(cvRound(dw*0.5),cvRound(dh*0.4));
-	Size size=Size(cvRound(dw*0.5),cvRound(dh*0.8));
-	ellipse(mask,faceCenter,size,0,0,360,Scalar(0),CV_FILLED);
-	filtered.setTo(Scalar(128),mask);
-
-	imshow("filtered",filtered);
-
-
-	imshow("warped",warped);
-
-	rectangle(img,Point(largestObject.x,largestObject.y),Point(largestObject.x+largestObject.width,largestObject.y+largestObject.height),Scalar(0,0,255),2,8);
-	rectangle(img_rect,Point(searchedLeftEye.x,searchedLeftEye.y),Point(searchedLeftEye.x+searchedLeftEye.width,searchedLeftEye.y+searchedLeftEye.height),Scalar(0,255,0),2,8);
-	rectangle(img_rect,Point(searchedRightEye.x,searchedRightEye.y),Point(searchedRightEye.x+searchedRightEye.width,searchedRightEye.y+searchedRightEye.height),Scalar(0,255,0),2,8);
-
-
-	//getPreprocessedFace
-	imshow("img_rect",img_rect);
-	imwrite("img_rect.jpg",img_rect);
-	imshow("img",img);
-	waitKey();
+	else
+	{
+		imshow("img",image);
+	}
 }
 int main(int argc,char **argv)
 {
-
 	initDetector();
-	string str=path+"/testData/15.jpg";
-	process(str);
+	//-- 2. Read the video stream
+	Mat frame;
+	CvCapture* capture = cvCaptureFromCAM(0);
+	//VideoCapture capture("Sample.avi");
+
+	if( capture/*.isOpened()*//*capture*/ )	// 摄像头读取文件开关
+	{
+		while( true )
+		{
+			frame = cvQueryFrame( capture );	// 摄像头读取文件开关
+			//capture >> frame;
+
+			//-- 3. Apply the classifier to the frame
+			if( !frame.empty() )
+			{ 
+				//detectAndDisplay( frame ); 
+				process(frame);
+				//imshow("1",frame);
+			}
+			else
+			{ 
+				printf(" --(!) No captured frame -- Break!"); 
+				break; 
+			}
+
+			int c = waitKey(10);
+			if( (char)c == 'c' ) { break; } 
+
+		}
+	}
 }
 
 /*
@@ -247,10 +279,10 @@ void detectObjectsCustom(const Mat &img, CascadeClassifier &cascade, vector<Rect
 3、为了使检测更快，输入图像暂时被缩小到'scaledWidth'，因为寻找人脸200的尺度已经足够了。
 4、注释：detectLargestObject()要比 detectManyObjects()快。
 */
-void detectLargestObject(const Mat &img, CascadeClassifier &cascade, Rect &largestObject, int scaledWidth)
+void detectLargestObject(const Mat &img, CascadeClassifier &cascade, Rect &largestObject, int scaledWidth,bool &hasFace)
 {
 	//仅寻找一个目标 (图像中最大的).
-	int flags = CV_HAAR_FIND_BIGGEST_OBJECT;// | CASCADE_DO_ROUGH_SEARCH;
+	int flags = CV_HAAR_FIND_BIGGEST_OBJECT;//CV_HAAR_FIND_BIGGEST_OBJECT;// | CASCADE_DO_ROUGH_SEARCH;
 	// 最小的目标大小.
 	Size minFeatureSize = Size(20, 20);
 	// 寻找细节,尺度因子,必须比1大
@@ -265,14 +297,16 @@ void detectLargestObject(const Mat &img, CascadeClassifier &cascade, Rect &large
 	if (objects.size() > 0) {
 		// 返回仅检测到的目标
 		largestObject = (Rect)objects.at(0);
+		hasFace=true;
 	}
 	else {
 		// 返回一个无效的矩阵
 		largestObject = Rect(-1,-1,-1,-1);
+		hasFace=false;
 	}
 }
 
-void detectManyObjects(const Mat &img, CascadeClassifier &cascade, vector<Rect> &objects, int scaledWidth)
+void detectManyObjects(const Mat &img, CascadeClassifier &cascade, vector<Rect> &objects, int scaledWidth,bool &hasFace)
 {
 	// 寻找图像中的许多目标
 	int flags = CV_HAAR_SCALE_IMAGE;
@@ -287,6 +321,14 @@ void detectManyObjects(const Mat &img, CascadeClassifier &cascade, vector<Rect> 
 
 	// 执行目标或者人脸检测，寻找图像中的许多目标
 	detectObjectsCustom(img, cascade, objects, scaledWidth, flags, minFeatureSize, searchScaleFactor, minNeighbors);
+	if (objects.size() > 0) 
+	{
+		hasFace=true;
+	}
+	else 
+	{
+		hasFace=false;
+	}
 }
 /*
 1、在给出的人脸图像中寻找双眼，返回左眼和右眼的中心，如果当找不到人眼时,或者设置为Point(-1,-1)
@@ -337,12 +379,13 @@ void detectBothEyes(const Mat &face, CascadeClassifier &eyeCascade1, CascadeClas
 		*searchedRightEye = Rect(rightX, topY, widthX, heightY);
 
 	// 寻找左区域，然后右区域使用第一个人眼检测器
-	detectLargestObject(topLeftOfFace, eyeCascade1, leftEyeRect, topLeftOfFace.cols);
-	detectLargestObject(topRightOfFace, eyeCascade2, rightEyeRect, topRightOfFace.cols);
+	bool isFace;
+	detectLargestObject(topLeftOfFace, eyeCascade1, leftEyeRect, topLeftOfFace.cols,isFace);
+	detectLargestObject(topRightOfFace, eyeCascade2, rightEyeRect, topRightOfFace.cols,isFace);
 
 	// 如果人眼没有检测到，尝试另外一个不同的级联检测器
 	if (leftEyeRect.width <= 0 && !eyeCascade3.empty()) {
-		detectLargestObject(topLeftOfFace, eyeCascade3, leftEyeRect, topLeftOfFace.cols);
+		detectLargestObject(topLeftOfFace, eyeCascade3, leftEyeRect, topLeftOfFace.cols,isFace);
 		//if (leftEyeRect.width > 0)
 		//    cout << "2nd eye detector LEFT SUCCESS" << endl;
 		//else
@@ -353,7 +396,7 @@ void detectBothEyes(const Mat &face, CascadeClassifier &eyeCascade1, CascadeClas
 
 	// 如果人眼没有检测到，尝试另外一个不同的级联检测器
 	if (rightEyeRect.width <= 0 && !eyeCascade3.empty()) {
-		detectLargestObject(topRightOfFace, eyeCascade3, rightEyeRect, topRightOfFace.cols);
+		detectLargestObject(topRightOfFace, eyeCascade3, rightEyeRect, topRightOfFace.cols,isFace);
 		//if (rightEyeRect.width > 0)
 		//    cout << "2nd eye detector RIGHT SUCCESS" << endl;
 		//else
