@@ -1,0 +1,17 @@
+# 
+# Try to find FARO
+# Once run this will define: 
+# FARO_LIB_DIR
+#
+
+SET(FARO_POSSIBLE_LIBDIRS
+  "C:/WINDOWS/WinSxS"
+  "C:/WINDOWS/WinSxS/x86_FARO.LS*"
+  "$ENV{FARO_LIB_DIR}"
+  )
+  
+FIND_PATH(FARO_LIB_DIR 
+  NAMES FARO.LS.SDK.dll  
+  PATHS ${FARO_POSSIBLE_LIBDIRS} )
+
+

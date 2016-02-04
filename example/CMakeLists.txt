@@ -1,0 +1,10 @@
+FILE(GLOB subdirectorys *)
+
+foreach(dir ${subdirectorys})
+	if(IS_DIRECTORY ${dir})
+		if(EXISTS ${dir}/CMakeLists.txt)
+			message(STATUS "Auto add example:" ${dir})
+			add_subdirectory(${dir})
+		endif()
+	endif()
+endforeach()

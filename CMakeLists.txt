@@ -1,0 +1,63 @@
+project(Face)
+cmake_minimum_required(VERSION 2.8)
+SET_PROPERTY(GLOBAL PROPERTY USE_FOLDERS ON)
+
+ADD_DEFINITIONS(-D_CRT_SECURE_NO_WARNINGS)
+
+SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/CMakeModules)
+SET(CMAKE_DEBUG_POSTFIX "d")
+	
+#large address aware option setting
+IF(${MINGW})
+	SET(LARGEADDRESSAWARE "--large-address-aware")
+ELSE(${MINGW})
+	IF (WIN32)
+		SET(LARGEADDRESSAWARE "/LARGEADDRESSAWARE")
+	ELSE (WIN32)
+		SET(LARGEADDRESSAWARE " ")
+	ENDIF (WIN32)
+ENDIF (${MINGW})
+
+IF (WIN32)
+	SET(APP_OPT "WIN32")
+ELSE (WIN32)
+	IF (APPLE)
+		#SET(APP_OPT "MACOSX_BUNDLE")
+		SET(APP_OPT "EXCLUDE_FROM_ALL")
+	ELSE (APPLE)
+		SET(APP_OPT " ")
+	ENDIF (APPLE)
+ENDIF (WIN32)
+
+
+# this command finds OpenCV libraries and sets all required variables
+
+SET(OpenCV_DIR $ENV{OpenCV2})
+
+set(OpenCV_STATIC OFF)
+
+FIND_PACKAGE(OpenCV REQUIRED)
+if(OpenCV_FOUND)
+	message(STATUS "OpenCV found! Version: " ${OpenCV_VERSION})
+elseif()
+	message(SEND_ERROR "OpenCV not found!")
+endif()
+
+INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
+INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR})
+INCLUDE_DIRECTORIES(${CMAKE_BINARY_DIR})
+LINK_DIRECTORIES(${CMAKE_BINARY_DIR})
+
+# Setup output directories
+SET(LIBRARY_OUTPUT_PATH 
+	${PROJECT_BINARY_DIR}/bin
+	CACHE
+	PATH
+	"Single directory for all libraries")
+	
+SET(EXECUTABLE_OUTPUT_PATH 
+	${PROJECT_BINARY_DIR}/bin
+	CACHE
+	PATH
+	"Single directory for all executables")
+ADD_SUBDIRECTORY(example)
